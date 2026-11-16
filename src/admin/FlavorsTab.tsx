@@ -89,7 +89,8 @@ export default function FlavorsTab({ flavors, run }: FlavorsTabProps) {
 
   // Pide confirmación y elimina un sabor.
   function handleDelete(flavor: Flavor) {
-    if (window.confirm(`¿Eliminar el sabor "${flavor.name}"? Esta acción no se puede deshacer.`)) {
+    const warning = flavor.is_today ? ' Es un sabor del día: dejará de aparecer en el menú.' : '';
+    if (window.confirm(`¿Eliminar el sabor "${flavor.name}"?${warning} Esta acción no se puede deshacer.`)) {
       run(() => deleteFlavor(flavor.id), 'Sabor eliminado');
     }
   }

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'motion/react';
 import type { MenuFlavor } from '../types';
 import Sparkle from './Sparkle';
@@ -12,6 +13,8 @@ type FlavorCardProps = {
 // etiqueta de categoría, nombre en neón y descripción.
 export default function FlavorCard({ flavor, index }: FlavorCardProps) {
   const color = flavorColors[flavor.category];
+  // Si la foto no carga, se muestra el degradado en lugar del icono de imagen rota.
+  const [failed, setFailed] = useState(false);
   return (
     <motion.li
       className="neon-box flex items-center gap-4 rounded-2xl bg-black/50 p-3 backdrop-blur-sm lg:flex-col lg:items-stretch lg:gap-3"
@@ -22,11 +25,12 @@ export default function FlavorCard({ flavor, index }: FlavorCardProps) {
       transition={{ duration: 0.45, delay: index * 0.07 }}
     >
       <div className="relative size-24 shrink-0 overflow-hidden rounded-xl lg:aspect-square lg:size-auto lg:w-full">
-        {flavor.image_url ? (
+        {flavor.image_url && !failed ? (
           <img
             src={flavor.image_url}
             alt={flavor.name}
             loading="lazy"
+            onError={() => setFailed(true)}
             className="h-full w-full object-cover"
           />
         ) : (

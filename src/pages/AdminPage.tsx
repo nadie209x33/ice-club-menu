@@ -22,11 +22,13 @@ type TabId = (typeof TABS)[number]['id'];
 type Notice = { kind: 'ok' | 'error'; text: string };
 
 type LoginFormProps = {
+  expired: boolean;
   onLogin: (username: string) => void;
 };
 
-// Pantalla de inicio de sesión del panel.
-function LoginForm({ onLogin }: LoginFormProps) {
+// Pantalla de inicio de sesión del panel. Si la sesión venció mientras se usaba
+// el panel, lo indica antes de pedir los datos de nuevo.
+function LoginForm({ expired, onLogin }: LoginFormProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -57,6 +59,11 @@ function LoginForm({ onLogin }: LoginFormProps) {
         <h1 className="text-center text-sm font-semibold uppercase tracking-[0.3em] text-mist">
           Panel de administrador
         </h1>
+        {expired && !error && (
+          <p role="status" className="text-sm text-neon-yellow">
+            La sesión venció. Hay que iniciar sesión de nuevo.
+          </p>
+        )}
         <label className="block text-sm text-mist">
           Usuario
           <input
@@ -104,10 +111,12 @@ export default function AdminPage() {
   const [flavors, setFlavors] = useState<Flavor[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [expired, setExpired] = useState(false);
 
   // Trata un error de la API: si la sesión venció vuelve al login; si no, muestra el mensaje.
   const handleError = useCallback((error: unknown) => {
     if (error instanceof ApiError && error.status === 401) {
+      setExpired(true);
       setUser(null);
       return;
     }
@@ -156,7 +165,15 @@ export default function AdminPage() {
   // Cierra la sesión y vuelve al login.
   async function handleLogout() {
     await logout().catch(() => undefined);
+    setExpired(false);
+    setNotice(null);
     setUser(null);
+  }
+
+  // Registra el inicio de sesión y limpia el aviso de sesión vencida.
+  function handleLogin(username: string) {
+    setExpired(false);
+    setUser(username);
   }
 
   return (
@@ -165,7 +182,7 @@ export default function AdminPage() {
       {user === undefined && (
         <p className="py-24 text-center text-sm uppercase tracking-[0.3em] text-mist">Cargando…</p>
       )}
-      {user === null && <LoginForm onLogin={setUser} />}
+      {user === null && <LoginForm expired={expired} onLogin={handleLogin} />}
       {user && (
         <div className="mx-auto max-w-5xl px-4 pb-16 pt-5">
           <header className="flex flex-wrap items-center justify-between gap-3">
@@ -215,10 +232,18 @@ export default function AdminPage() {
             )}
           </div>
 
-          <main role="tabpanel" className="mt-2">
-            {tab === 'today' && <TodayTab flavors={flavors} run={run} />}
-            {tab === 'flavors' && <FlavorsTab flavors={flavors} run={run} />}
-            {tab === 'prices' && <PricesTab categories={categories} run={run} />}
+          {/* Las tres pestañas permanecen montadas y solo se oculta la inactiva,
+              para que cambiar de pestaña no descarte lo que aún no se ha guardado. */}
+          <main className="mt-2">
+            <div role="tabpanel" hidden={tab !== 'today'}>
+              <TodayTab flavors={flavors} run={run} />
+            </div>
+            <div role="tabpanel" hidden={tab !== 'flavors'}>
+              <FlavorsTab flavors={flavors} run={run} />
+            </div>
+            <div role="tabpanel" hidden={tab !== 'prices'}>
+              <PricesTab categories={categories} run={run} />
+            </div>
           </main>
         </div>
       )}

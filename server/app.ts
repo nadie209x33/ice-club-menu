@@ -22,6 +22,14 @@ type AppContext = Context<{ Bindings: Bindings; Variables: Variables }>;
 const SESSION_COOKIE = 'ice_session';
 const SESSION_SECONDS = 12 * 60 * 60;
 
+// Límites del login: evitan que una entrada enorme obligue a calcular un hash costoso.
+const MAX_USERNAME_LENGTH = 64;
+const MAX_PASSWORD_LENGTH = 256;
+
+// Mensaje cuando el secreto de sesión no está configurado. Solo afecta a las rutas
+// que usan la sesión; el menú público sigue funcionando sin él.
+const MISSING_SECRET = 'Falta configurar JWT_SECRET en el servidor';
+
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath('/api');
 
 // Opciones comunes de la cookie de sesión: invisible para JavaScript, solo por HTTPS
@@ -35,6 +43,7 @@ const cookieOptions = {
 
 // Middleware de sesión: exige una cookie con un JWT válido y vigente; si no, responde 401.
 async function requireAuth(c: AppContext, next: Next) {
+  if (!c.env.JWT_SECRET) return c.json({ error: MISSING_SECRET }, 500);
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return c.json({ error: 'Sesión no iniciada' }, 401);
   try {
@@ -47,14 +56,6 @@ async function requireAuth(c: AppContext, next: Next) {
   await next();
 }
 
-// Falla de forma explícita si el secreto de sesión no está configurado.
-app.use('*', async (c, next) => {
-  if (!c.env.JWT_SECRET) {
-    return c.json({ error: 'Falta configurar JWT_SECRET en el servidor' }, 500);
-  }
-  await next();
-});
-
 app.use('/auth/me', requireAuth);
 app.use('/admin/*', requireAuth);
 
@@ -63,11 +64,15 @@ app.get('/health', (c) => c.json({ ok: true }));
 
 // Inicio de sesión: valida usuario y contraseña y entrega la cookie de sesión.
 app.post('/auth/login', async (c) => {
+  if (!c.env.JWT_SECRET) return c.json({ error: MISSING_SECRET }, 500);
   const body = await c.req.json<{ username?: unknown; password?: unknown }>().catch(() => null);
   const username = typeof body?.username === 'string' ? body.username.trim() : '';
   const password = typeof body?.password === 'string' ? body.password : '';
   if (!username || !password) {
     return c.json({ error: 'Usuario y contraseña son obligatorios' }, 400);
+  }
+  if (username.length > MAX_USERNAME_LENGTH || password.length > MAX_PASSWORD_LENGTH) {
+    return c.json({ error: 'Usuario o contraseña incorrectos' }, 401);
   }
 
   const admin = await c.env.DB.prepare(

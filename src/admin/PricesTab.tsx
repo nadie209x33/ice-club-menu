@@ -10,14 +10,16 @@ import type { Run } from './ui';
 
 type ProductFormProps = {
   initial: ProductInput;
+  isNew?: boolean;
   onSubmit: (data: ProductInput) => Promise<boolean>;
   onCancel: () => void;
 };
 
 // Formulario de un producto: nombre, precio en pesos y descripción.
-function ProductForm({ initial, onSubmit, onCancel }: ProductFormProps) {
+// En un producto nuevo el precio empieza vacío; al editar se muestra el guardado, incluso si es 0.
+function ProductForm({ initial, isNew = false, onSubmit, onCancel }: ProductFormProps) {
   const [label, setLabel] = useState(initial.label);
-  const [price, setPrice] = useState(initial.price ? String(initial.price) : '');
+  const [price, setPrice] = useState(isNew ? '' : String(initial.price));
   const [description, setDescription] = useState(initial.description);
   const [busy, setBusy] = useState(false);
 
@@ -159,6 +161,7 @@ export default function PricesTab({ categories, run }: PricesTabProps) {
           {open && 'category' in open && open.category === category.id ? (
             <div className="mt-2 border-t border-white/10 pt-3">
               <ProductForm
+                isNew
                 initial={{ category_id: category.id, label: '', price: 0, description: '' }}
                 onSubmit={(data) => run(() => createProduct(data), 'Producto creado')}
                 onCancel={() => setOpen(null)}

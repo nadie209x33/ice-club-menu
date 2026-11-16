@@ -24,15 +24,23 @@ export default function TodayTab({ flavors, run }: TodayTabProps) {
         .map((f) => f.id),
     [flavors],
   );
-  const [ids, setIds] = useState<number[]>(saved);
+  const savedKey = saved.join(',');
+  const [draft, setDraft] = useState<number[]>(saved);
 
-  // Cuando llegan datos nuevos del servidor, la selección en pantalla se iguala a la guardada.
-  useEffect(() => setIds(saved), [saved]);
+  // La selección en pantalla se iguala a la guardada solo cuando esta cambia de verdad.
+  // Una recarga de datos por otro motivo (por ejemplo, subir una foto) no descarta
+  // los cambios que aún no se han guardado.
+  useEffect(() => {
+    setDraft(savedKey ? savedKey.split(',').map(Number) : []);
+  }, [savedKey]);
 
+  // Se descartan de la selección los sabores que ya no existen en el catálogo.
   const byId = new Map(flavors.map((f) => [f.id, f]));
-  const selected = ids.map((id) => byId.get(id)).filter((f): f is Flavor => f !== undefined);
+  const ids = draft.filter((id) => byId.has(id));
+  const setIds = setDraft;
+  const selected = ids.map((id) => byId.get(id)!);
   const available = flavors.filter((f) => !ids.includes(f.id));
-  const changed = ids.join(',') !== saved.join(',');
+  const changed = ids.join(',') !== savedKey;
   const full = ids.length >= MAX_TODAY;
 
   // Intercambia un sabor con su vecino para subirlo o bajarlo de posición.
@@ -96,6 +104,11 @@ export default function TodayTab({ flavors, run }: TodayTabProps) {
             Descartar cambios
           </Button>
         </div>
+        {changed && (
+          <p className="mt-2 text-sm text-neon-yellow">
+            Hay cambios sin guardar: el menú no cambia hasta pulsar "Guardar".
+          </p>
+        )}
       </section>
 
       <section>
