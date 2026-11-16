@@ -44,6 +44,18 @@ const sectionColors: Record<string, string> = {
   blue: colors.sky,
 };
 
+// Nombre visible de cada color de sección, para elegirlo en el panel.
+export const sectionColorLabels: Record<string, string> = {
+  cyan: 'Cian',
+  lime: 'Lima',
+  pink: 'Rosado',
+  yellow: 'Amarillo',
+  green: 'Verde',
+  red: 'Rojo',
+  orange: 'Naranja',
+  blue: 'Azul',
+};
+
 // Devuelve el color de una sección; si el nombre no se reconoce, usa el cian.
 export function sectionColor(name: string): string {
   return sectionColors[name] ?? colors.cyan;

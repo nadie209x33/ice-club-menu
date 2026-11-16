@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router';
+import AccountTab from '../admin/AccountTab';
 import FlavorsTab from '../admin/FlavorsTab';
 import PricesTab from '../admin/PricesTab';
 import TodayTab from '../admin/TodayTab';
@@ -16,6 +17,7 @@ const TABS = [
   { id: 'today', label: 'Sabores del día' },
   { id: 'flavors', label: 'Sabores' },
   { id: 'prices', label: 'Precios' },
+  { id: 'account', label: 'Cuenta' },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -103,7 +105,7 @@ function LoginForm({ expired, onLogin }: LoginFormProps) {
 }
 
 // Panel de administrador: comprueba la sesión, muestra el login si no la hay
-// y, con sesión, las pestañas de sabores del día, sabores y precios.
+// y, con sesión, las pestañas de sabores del día, sabores, precios y cuenta.
 export default function AdminPage() {
   // undefined: comprobando la sesión; null: sin sesión; texto: usuario con sesión.
   const [user, setUser] = useState<string | null | undefined>(undefined);
@@ -243,6 +245,9 @@ export default function AdminPage() {
             </div>
             <div role="tabpanel" hidden={tab !== 'prices'}>
               <PricesTab categories={categories} run={run} />
+            </div>
+            <div role="tabpanel" hidden={tab !== 'account'}>
+              <AccountTab username={user} run={run} />
             </div>
           </main>
         </div>

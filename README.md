@@ -3,7 +3,7 @@
 Menú interactivo para Ice Club La Decanatura, bar de granizados con licor en Bogotá ([@iceclubdeca](https://www.instagram.com/iceclubdeca/)).
 
 - **Menú público (`/`)**: muestra los cinco sabores del día y la carta de precios. Está pensado para abrirse desde el celular.
-- **Panel de administrador (`/admin`)**: con usuario y contraseña, permite elegir los sabores del día, editar el catálogo de sabores, cambiar precios y subir fotos.
+- **Panel de administrador (`/admin`)**: con usuario y contraseña, permite elegir los sabores del día, editar el catálogo de sabores, gestionar las secciones y los productos de la carta (crear, editar, reordenar y eliminar), subir fotos y cambiar la contraseña.
 
 ## Tecnologías
 
@@ -107,6 +107,9 @@ Con sesión (responden 401 sin una cookie válida):
 - `GET|POST /api/admin/flavors`, `PUT|DELETE /api/admin/flavors/:id`
 - `PUT /api/admin/today` con `{ "ids": [...] }`: máximo cinco, sin repetidos, en orden.
 - `GET|POST /api/admin/products`, `PUT|DELETE /api/admin/products/:id`
+- `POST /api/admin/categories`, `PUT|DELETE /api/admin/categories/:id`: secciones de la carta. Eliminar una sección elimina sus productos y sus fotos.
+- `PUT /api/admin/order/categories` y `PUT /api/admin/order/products/:categoryId` con `{ "ids": [...] }`: orden de las secciones y de los productos de una sección. La lista debe contener exactamente los elementos existentes.
+- `POST /api/admin/password` con `{ "current": "...", "next": "..." }`: cambia la contraseña y cierra las demás sesiones abiertas.
 - `POST|DELETE /api/admin/images/:kind/:id` (`kind`: `flavors` o `products`). El cuerpo de la petición es el archivo; se aceptan JPEG, PNG y WebP de hasta 5 MB.
 
 Los errores devuelven `{ "error": "mensaje en español" }`.
@@ -160,7 +163,9 @@ Pages toma los bindings `DB` y `BUCKET` de `wrangler.toml` porque el archivo def
 
 - Las contraseñas se guardan con hash PBKDF2-SHA256 de 100 000 iteraciones y sal aleatoria. `scripts/create-admin.mjs` y `server/auth.ts` usan los mismos parámetros.
 - La cookie de sesión es `HttpOnly`, `Secure` y `SameSite=Strict`.
-- La sesión deja de valer si el administrador se elimina de la base de datos.
+- El login se bloquea durante quince minutos tras cinco intentos fallidos desde una misma dirección IP (respuesta 429). Un inicio de sesión correcto reinicia la cuenta. Para levantar un bloqueo a mano: `npx wrangler d1 execute ice-club-db --remote --command "DELETE FROM login_attempts"`.
+- La contraseña se cambia desde la pestaña **Cuenta** del panel. Si se olvida, se repite `npm run create-admin` con el mismo usuario y se aplica el `admin.sql` con `--remote`. En ambos casos se cierran las sesiones abiertas.
+- La sesión deja de valer si el administrador se elimina de la base de datos o cambia su contraseña.
 - `public/_headers` define las cabeceras de seguridad de los archivos estáticos, incluida la política de contenido (CSP); la API añade las suyas en `server/app.ts`. Si se incorpora un recurso externo nuevo (otra fuente, un script, un mapa), hay que autorizar su origen en la CSP.
 - Las respuestas JSON de la API se envían con `Cache-Control: no-store`.
 - `.dev.vars` y `admin.sql` están excluidos de Git y no deben subirse al repositorio.

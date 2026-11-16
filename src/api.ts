@@ -66,6 +66,21 @@ export const createProduct = (data: ProductInput) => send('POST', '/admin/produc
 export const updateProduct = (id: number, data: ProductInput) => send('PUT', `/admin/products/${id}`, data);
 export const deleteProduct = (id: number) => send('DELETE', `/admin/products/${id}`);
 
+// Secciones de la carta: alta, edición y eliminación (con todos sus productos).
+export type CategoryInput = { name: string; color: string };
+export const createCategory = (data: CategoryInput) => send('POST', '/admin/categories', data);
+export const updateCategory = (id: number, data: CategoryInput) => send('PUT', `/admin/categories/${id}`, data);
+export const deleteCategory = (id: number) => send('DELETE', `/admin/categories/${id}`);
+
+// Orden de las secciones y de los productos de una sección: lista completa de identificadores.
+export const orderCategories = (ids: number[]) => send('PUT', '/admin/order/categories', { ids });
+export const orderProducts = (categoryId: number, ids: number[]) =>
+  send('PUT', `/admin/order/products/${categoryId}`, { ids });
+
+// Cambio de contraseña del administrador con sesión.
+export const changePassword = (current: string, next: string) =>
+  send('POST', '/admin/password', { current, next });
+
 // Fotos: el cuerpo de la petición es el archivo ya comprimido.
 export const uploadImage = (kind: ImageKind, id: number, image: Blob) =>
   request(`/admin/images/${kind}/${id}`, {

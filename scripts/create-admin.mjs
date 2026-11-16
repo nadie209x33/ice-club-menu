@@ -83,7 +83,8 @@ async function main() {
   // por lo que pueden escribirse directamente en el SQL.
   const sql =
     `INSERT INTO admins (username, password_hash, salt) VALUES ('${username}', '${hash.toString('hex')}', '${salt.toString('hex')}')\n` +
-    `ON CONFLICT (username) DO UPDATE SET password_hash = excluded.password_hash, salt = excluded.salt;\n`;
+    // Si el usuario ya existe se cambia su contraseña y se cierran sus sesiones abiertas.
+    `ON CONFLICT (username) DO UPDATE SET password_hash = excluded.password_hash, salt = excluded.salt, token_version = token_version + 1;\n`;
 
   writeFileSync('admin.sql', sql);
   console.log(`admin.sql generado para el usuario "${username}".`);

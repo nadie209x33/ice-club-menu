@@ -26,6 +26,12 @@ const SESSION_SECONDS = 12 * 60 * 60;
 // Límites del login: evitan que una entrada enorme obligue a calcular un hash costoso.
 const MAX_USERNAME_LENGTH = 64;
 const MAX_PASSWORD_LENGTH = 256;
+const MIN_PASSWORD_LENGTH = 8;
+
+// Límite de intentos: tras cinco fallos desde una misma dirección IP,
+// el login se bloquea hasta que pasen quince minutos desde el primero.
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_WINDOW_SECONDS = 15 * 60;
 
 // Mensaje cuando el secreto de sesión no está configurado. Solo afecta a las rutas
 // que usan la sesión; el menú público sigue funcionando sin él.
@@ -47,18 +53,23 @@ async function requireAuth(c: AppContext, next: Next) {
   if (!c.env.JWT_SECRET) return c.json({ error: MISSING_SECRET }, 500);
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return c.json({ error: 'Sesión no iniciada' }, 401);
+  let version = 0;
   try {
     const payload = await verify(token, c.env.JWT_SECRET, 'HS256');
     if (typeof payload.sub !== 'string') throw new Error('Token sin usuario');
     c.set('username', payload.sub);
+    if (typeof payload.ver === 'number') version = payload.ver;
   } catch {
     return c.json({ error: 'Sesión no válida o vencida' }, 401);
   }
-  // La sesión deja de valer si el administrador ya no existe en la base de datos.
-  const admin = await c.env.DB.prepare('SELECT 1 FROM admins WHERE username = ?')
+  // La sesión deja de valer si el administrador ya no existe en la base de datos
+  // o si cambió la contraseña después de iniciarla.
+  const admin = await c.env.DB.prepare('SELECT token_version FROM admins WHERE username = ?')
     .bind(c.get('username'))
-    .first();
-  if (!admin) return c.json({ error: 'Sesión no válida o vencida' }, 401);
+    .first<{ token_version: number }>();
+  if (!admin || admin.token_version !== version) {
+    return c.json({ error: 'Sesión no válida o vencida' }, 401);
+  }
   await next();
 }
 
@@ -79,6 +90,49 @@ app.use('/admin/*', requireAuth);
 // Ruta de comprobación: confirma que la API responde.
 app.get('/health', (c) => c.json({ ok: true }));
 
+// Dirección IP de quien hace la petición, según Cloudflare.
+function clientIp(c: AppContext): string {
+  return c.req.header('CF-Connecting-IP') ?? 'local';
+}
+
+// Devuelve cuántos segundos faltan para que una dirección IP bloqueada pueda
+// volver a intentar el login; 0 si no está bloqueada.
+async function loginBlockedSeconds(c: AppContext): Promise<number> {
+  const row = await c.env.DB.prepare('SELECT failures, window_start FROM login_attempts WHERE ip = ?')
+    .bind(clientIp(c))
+    .first<{ failures: number; window_start: number }>();
+  if (!row || row.failures < LOGIN_MAX_FAILURES) return 0;
+  const remaining = LOGIN_WINDOW_SECONDS - (Math.floor(Date.now() / 1000) - row.window_start);
+  return Math.max(0, remaining);
+}
+
+// Registra un intento fallido. Si el periodo anterior ya terminó, empieza uno nuevo.
+// De paso borra los registros de más de un día.
+async function recordLoginFailure(c: AppContext) {
+  const now = Math.floor(Date.now() / 1000);
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO login_attempts (ip, failures, window_start) VALUES (?1, 1, ?2)
+       ON CONFLICT (ip) DO UPDATE SET
+         failures = CASE WHEN ?2 - window_start >= ?3 THEN 1 ELSE failures + 1 END,
+         window_start = CASE WHEN ?2 - window_start >= ?3 THEN ?2 ELSE window_start END`,
+    ).bind(clientIp(c), now, LOGIN_WINDOW_SECONDS),
+    c.env.DB.prepare('DELETE FROM login_attempts WHERE window_start < ?').bind(now - 86400),
+  ]);
+}
+
+// Firma el JWT de la sesión y lo entrega en la cookie. version es la versión de
+// sesión del administrador en ese momento.
+async function startSession(c: AppContext, username: string, version: number) {
+  const now = Math.floor(Date.now() / 1000);
+  const token = await sign(
+    { sub: username, ver: version, iat: now, exp: now + SESSION_SECONDS },
+    c.env.JWT_SECRET,
+    'HS256',
+  );
+  setCookie(c, SESSION_COOKIE, token, { ...cookieOptions, maxAge: SESSION_SECONDS });
+}
+
 // Inicio de sesión: valida usuario y contraseña y entrega la cookie de sesión.
 app.post('/auth/login', async (c) => {
   if (!c.env.JWT_SECRET) return c.json({ error: MISSING_SECRET }, 500);
@@ -92,26 +146,31 @@ app.post('/auth/login', async (c) => {
     return c.json({ error: 'Usuario o contraseña incorrectos' }, 401);
   }
 
+  const blocked = await loginBlockedSeconds(c);
+  if (blocked > 0) {
+    c.header('Retry-After', String(blocked));
+    return c.json(
+      { error: `Demasiados intentos. Se podrá intentar de nuevo en ${Math.ceil(blocked / 60)} min.` },
+      429,
+    );
+  }
+
   const admin = await c.env.DB.prepare(
-    'SELECT username, password_hash, salt FROM admins WHERE username = ?',
+    'SELECT username, password_hash, salt, token_version FROM admins WHERE username = ?',
   )
     .bind(username)
-    .first<{ username: string; password_hash: string; salt: string }>();
+    .first<{ username: string; password_hash: string; salt: string; token_version: number }>();
 
   // Si el usuario no existe se calcula igualmente un hash, para que la respuesta
   // tarde lo mismo y no revele qué usuarios existen.
   const hash = await hashPassword(password, admin?.salt ?? generateSalt());
   if (!admin || !timingSafeEqual(hash, admin.password_hash)) {
+    await recordLoginFailure(c);
     return c.json({ error: 'Usuario o contraseña incorrectos' }, 401);
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const token = await sign(
-    { sub: admin.username, iat: now, exp: now + SESSION_SECONDS },
-    c.env.JWT_SECRET,
-    'HS256',
-  );
-  setCookie(c, SESSION_COOKIE, token, { ...cookieOptions, maxAge: SESSION_SECONDS });
+  await c.env.DB.prepare('DELETE FROM login_attempts WHERE ip = ?').bind(clientIp(c)).run();
+  await startSession(c, admin.username, admin.token_version);
   return c.json({ username: admin.username });
 });
 
@@ -124,12 +183,55 @@ app.post('/auth/logout', (c) => {
 // Devuelve el usuario de la sesión actual.
 app.get('/auth/me', (c) => c.json({ username: c.get('username') }));
 
+// Cambia la contraseña del administrador con sesión. Exige la contraseña actual,
+// invalida las demás sesiones abiertas y renueva la de quien hace el cambio.
+app.post('/admin/password', async (c) => {
+  const body = await c.req.json<{ current?: unknown; next?: unknown }>().catch(() => null);
+  const current = typeof body?.current === 'string' ? body.current : '';
+  const next = typeof body?.next === 'string' ? body.next : '';
+  if (!current || !next) {
+    return c.json({ error: 'La contraseña actual y la nueva son obligatorias' }, 400);
+  }
+  if (next.length < MIN_PASSWORD_LENGTH || next.length > MAX_PASSWORD_LENGTH) {
+    return c.json(
+      { error: `La contraseña nueva debe tener entre ${MIN_PASSWORD_LENGTH} y ${MAX_PASSWORD_LENGTH} caracteres` },
+      400,
+    );
+  }
+
+  const username = c.get('username');
+  const admin = await c.env.DB.prepare(
+    'SELECT password_hash, salt, token_version FROM admins WHERE username = ?',
+  )
+    .bind(username)
+    .first<{ password_hash: string; salt: string; token_version: number }>();
+  // Se responde 400 y no 401 para que el panel no lo confunda con una sesión vencida.
+  if (
+    !admin ||
+    current.length > MAX_PASSWORD_LENGTH ||
+    !timingSafeEqual(await hashPassword(current, admin.salt), admin.password_hash)
+  ) {
+    return c.json({ error: 'La contraseña actual no es correcta' }, 400);
+  }
+
+  const salt = generateSalt();
+  const hash = await hashPassword(next, salt);
+  await c.env.DB.prepare(
+    'UPDATE admins SET password_hash = ?, salt = ?, token_version = token_version + 1 WHERE username = ?',
+  )
+    .bind(hash, salt, username)
+    .run();
+  await startSession(c, username, admin.token_version + 1);
+  return c.json({ ok: true });
+});
+
 // ---------------------------------------------------------------------------
 // Utilidades de validación
 // ---------------------------------------------------------------------------
 
 const FLAVOR_CATEGORIES = ['granizado', 'cremoso', 'artesanal'];
 const IMAGE_KINDS = ['flavors', 'products'];
+const SECTION_COLORS = ['cyan', 'lime', 'pink', 'yellow', 'green', 'red', 'orange', 'blue'];
 const MAX_TODAY = 5;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_PRICE = 10_000_000;
@@ -291,7 +393,8 @@ app.get('/menu', async (c) => {
       const { id, name, description, category, image_url } = toFlavor(row);
       return { id, name, description, category, image_url };
     }),
-    categories: await loadCarta(c.env.DB),
+    // Las secciones sin productos no se muestran al público.
+    categories: (await loadCarta(c.env.DB)).filter((category) => category.products.length > 0),
   });
 });
 
@@ -434,6 +537,103 @@ app.delete('/admin/products/:id', async (c) => {
   if (!row) return c.json({ error: 'Producto no encontrado' }, 404);
   if (row.image_key) await c.env.BUCKET.delete(row.image_key);
   return c.json({ ok: true });
+});
+
+// Valida los campos de una sección de la carta.
+function readCategory(body: Record<string, unknown>) {
+  const color = readText(body.color, 'color', 1, 20);
+  if (!SECTION_COLORS.includes(color)) throw new ValidationError('El color de la sección no es válido');
+  return { name: readText(body.name, 'name', 1, 40), color };
+}
+
+// Valida una lista de identificadores para reordenar: debe contener exactamente
+// los mismos elementos que existen, sin repetidos ni faltantes.
+function readOrder(body: Record<string, unknown>, existing: number[]): number[] {
+  if (!Array.isArray(body.ids)) throw new ValidationError('El campo "ids" debe ser una lista');
+  const ids = body.ids.map((value) => readInt(value, 'ids', 1, 2_000_000_000));
+  const same =
+    ids.length === existing.length &&
+    new Set(ids).size === ids.length &&
+    ids.every((id) => existing.includes(id));
+  if (!same) throw new ValidationError('La lista no coincide con los elementos existentes');
+  return ids;
+}
+
+// Crea una sección al final de la carta.
+app.post('/admin/categories', async (c) => {
+  const data = readCategory(await readJson(c));
+  const row = await c.env.DB.prepare(
+    `INSERT INTO categories (name, color, sort_order)
+     VALUES (?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM categories)) RETURNING id`,
+  )
+    .bind(data.name, data.color)
+    .first<{ id: number }>();
+  return c.json({ id: row!.id }, 201);
+});
+
+// Edita el nombre y el color de una sección.
+app.put('/admin/categories/:id', async (c) => {
+  const id = readId(c.req.param('id'));
+  const data = readCategory(await readJson(c));
+  const row = await c.env.DB.prepare('UPDATE categories SET name = ?, color = ? WHERE id = ? RETURNING id')
+    .bind(data.name, data.color, id)
+    .first();
+  if (!row) return c.json({ error: 'Sección no encontrada' }, 404);
+  return c.json({ ok: true });
+});
+
+// Elimina una sección con todos sus productos y borra de R2 las fotos de esos productos.
+app.delete('/admin/categories/:id', async (c) => {
+  const id = readId(c.req.param('id'));
+  const category = await c.env.DB.prepare('SELECT id FROM categories WHERE id = ?').bind(id).first();
+  if (!category) return c.json({ error: 'Sección no encontrada' }, 404);
+  const images = await c.env.DB.prepare(
+    'SELECT image_key FROM products WHERE category_id = ? AND image_key IS NOT NULL',
+  )
+    .bind(id)
+    .all<{ image_key: string }>();
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM products WHERE category_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(id),
+  ]);
+  if (images.results.length > 0) {
+    await c.env.BUCKET.delete(images.results.map((row) => row.image_key));
+  }
+  return c.json({ ok: true });
+});
+
+// Define el orden de las secciones de la carta.
+app.put('/admin/order/categories', async (c) => {
+  const existing = await c.env.DB.prepare('SELECT id FROM categories').all<{ id: number }>();
+  const ids = readOrder(await readJson(c), existing.results.map((row) => row.id));
+  if (ids.length > 0) {
+    await c.env.DB.batch(
+      ids.map((id, index) =>
+        c.env.DB.prepare('UPDATE categories SET sort_order = ? WHERE id = ?').bind(index + 1, id),
+      ),
+    );
+  }
+  return c.json({ ids });
+});
+
+// Define el orden de los productos dentro de una sección.
+app.put('/admin/order/products/:categoryId', async (c) => {
+  const categoryId = readId(c.req.param('categoryId'));
+  const existing = await c.env.DB.prepare('SELECT id FROM products WHERE category_id = ?')
+    .bind(categoryId)
+    .all<{ id: number }>();
+  const ids = readOrder(await readJson(c), existing.results.map((row) => row.id));
+  if (ids.length > 0) {
+    await c.env.DB.batch(
+      ids.map((id, index) =>
+        c.env.DB.prepare("UPDATE products SET sort_order = ?, updated_at = datetime('now') WHERE id = ?").bind(
+          index + 1,
+          id,
+        ),
+      ),
+    );
+  }
+  return c.json({ ids });
 });
 
 // Valida el tipo de la URL de imágenes y devuelve la tabla correspondiente.
