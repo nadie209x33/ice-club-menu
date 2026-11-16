@@ -9,7 +9,7 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "ice-club-db"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "957895d9-0f86-4d27-ab48-5bde93abab86"
 migrations_dir = "migrations"
 
 # Almacén R2 para las fotos de sabores y productos.
