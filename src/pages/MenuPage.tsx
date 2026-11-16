@@ -9,16 +9,41 @@ import SectionTitle from '../components/SectionTitle';
 import { colors } from '../components/theme';
 import type { Menu } from '../types';
 
+const REFRESH_MS = 5 * 60 * 1000;
+
 // Menú público: logo, sabores del día, carta de precios, enlace a Instagram
 // y leyenda legal. Los datos se piden a la API al abrir la página.
 export default function MenuPage() {
   const [menu, setMenu] = useState<Menu | null>(null);
   const [error, setError] = useState('');
 
+  // Carga el menú al abrir la página y lo actualiza al volver a la pestaña y cada
+  // cinco minutos, para que un celular o una pantalla con el menú abierto refleje
+  // los cambios del día sin recargar. Si una actualización falla, se conserva el menú visible.
   useEffect(() => {
-    getMenu()
-      .then(setMenu)
-      .catch((e: Error) => setError(e.message));
+    let active = true;
+    const load = () =>
+      getMenu()
+        .then((data) => {
+          if (!active) return;
+          setMenu(data);
+          setError('');
+        })
+        .catch((e: Error) => {
+          if (active) setError(e.message);
+        });
+    const refresh = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+
+    load();
+    document.addEventListener('visibilitychange', refresh);
+    const timer = window.setInterval(refresh, REFRESH_MS);
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', refresh);
+      window.clearInterval(timer);
+    };
   }, []);
 
   return (
@@ -31,7 +56,7 @@ export default function MenuPage() {
         </header>
 
         <main>
-          {error && (
+          {error && !menu && (
             <p role="alert" className="mx-auto max-w-md rounded-2xl border border-red-400/60 bg-black/50 p-4 text-center text-red-200">
               No se pudo cargar el menú. {error}
             </p>
@@ -50,7 +75,7 @@ export default function MenuPage() {
                 {menu.flavors.length > 0 ? (
                   <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                     {menu.flavors.map((flavor, index) => (
-                      <FlavorCard key={flavor.id} flavor={flavor} index={index} />
+                      <FlavorCard key={`${flavor.id}-${flavor.image_url}`} flavor={flavor} index={index} />
                     ))}
                   </ul>
                 ) : (

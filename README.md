@@ -160,4 +160,13 @@ Pages toma los bindings `DB` y `BUCKET` de `wrangler.toml` porque el archivo def
 
 - Las contraseñas se guardan con hash PBKDF2-SHA256 de 100 000 iteraciones y sal aleatoria. `scripts/create-admin.mjs` y `server/auth.ts` usan los mismos parámetros.
 - La cookie de sesión es `HttpOnly`, `Secure` y `SameSite=Strict`.
+- La sesión deja de valer si el administrador se elimina de la base de datos.
+- `public/_headers` define las cabeceras de seguridad de los archivos estáticos, incluida la política de contenido (CSP); la API añade las suyas en `server/app.ts`. Si se incorpora un recurso externo nuevo (otra fuente, un script, un mapa), hay que autorizar su origen en la CSP.
+- Las respuestas JSON de la API se envían con `Cache-Control: no-store`.
 - `.dev.vars` y `admin.sql` están excluidos de Git y no deben subirse al repositorio.
+
+## Funcionamiento
+
+- El menú se actualiza solo: vuelve a consultar la API al regresar a la pestaña y cada cinco minutos.
+- `public/robots.txt` y la cabecera `X-Robots-Tag` evitan que los buscadores listen el panel.
+- Cada push y cada pull request ejecutan `npm run build` en GitHub Actions (`.github/workflows/ci.yml`).

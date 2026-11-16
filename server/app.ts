@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context, Next } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { sign, verify } from 'hono/jwt';
+import { secureHeaders } from 'hono/secure-headers';
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import { generateSalt, hashPassword, timingSafeEqual } from './auth';
 
@@ -53,8 +54,24 @@ async function requireAuth(c: AppContext, next: Next) {
   } catch {
     return c.json({ error: 'Sesión no válida o vencida' }, 401);
   }
+  // La sesión deja de valer si el administrador ya no existe en la base de datos.
+  const admin = await c.env.DB.prepare('SELECT 1 FROM admins WHERE username = ?')
+    .bind(c.get('username'))
+    .first();
+  if (!admin) return c.json({ error: 'Sesión no válida o vencida' }, 401);
   await next();
 }
+
+// Cabeceras de seguridad en todas las respuestas de la API: impiden que el navegador
+// reinterprete el tipo de un archivo y que las respuestas se incrusten en otros sitios.
+app.use('*', secureHeaders());
+
+// Las respuestas JSON no se guardan en caché, para que el menú y el panel muestren
+// siempre los datos actuales. Las imágenes fijan su propia caché.
+app.use('*', async (c, next) => {
+  await next();
+  if (!c.req.path.startsWith('/api/images/')) c.header('Cache-Control', 'no-store');
+});
 
 app.use('/auth/me', requireAuth);
 app.use('/admin/*', requireAuth);
