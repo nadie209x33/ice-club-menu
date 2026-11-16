@@ -4,8 +4,7 @@ name = "ice-club-menu"
 compatibility_date = "2026-11-01"
 pages_build_output_dir = "dist"
 
-# Base de datos D1 (SQLite). El database_id es un marcador:
-# se reemplaza por el real al crear la base en la Fase 8.
+# Base de datos D1 (SQLite).
 [[d1_databases]]
 binding = "DB"
 database_name = "ice-club-db"
