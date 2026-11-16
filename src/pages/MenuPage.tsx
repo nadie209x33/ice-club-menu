@@ -69,9 +69,7 @@ export default function MenuPage() {
           {menu && (
             <>
               <section aria-label="Sabores del día" className="mt-2">
-                <SectionTitle color={colors.cyan} hint="Recién preparados">
-                  Sabores del día
-                </SectionTitle>
+                <SectionTitle color={colors.cyan}>Sabores del día</SectionTitle>
                 {menu.flavors.length > 0 ? (
                   <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                     {menu.flavors.map((flavor, index) => (
@@ -84,9 +82,7 @@ export default function MenuPage() {
               </section>
 
               <section aria-label="Carta de precios" className="mt-14">
-                <SectionTitle color={colors.magenta} hint="Precios en miles de pesos">
-                  Carta
-                </SectionTitle>
+                <SectionTitle color={colors.magenta}>Carta</SectionTitle>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   {menu.categories.map((category, index) => (
                     <PriceSection key={category.id} category={category} index={index} />
