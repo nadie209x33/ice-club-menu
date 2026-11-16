@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "db:local": "wrangler d1 migrations apply ice-club-db --local",
     "db:remote": "wrangler d1 migrations apply ice-club-db --remote",
-    "create-admin": "node scripts/create-admin.mjs"
+    "create-admin": "node scripts/create-admin.mjs",
+    "backup": "node scripts/backup.mjs"
   },
   "dependencies": {
     "hono": "^4.13.19",

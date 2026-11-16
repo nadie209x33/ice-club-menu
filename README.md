@@ -93,6 +93,7 @@ El menú queda en `http://localhost:5173/` y el panel en `http://localhost:5173/
 | `npm run db:local` | Aplica las migraciones a la base local |
 | `npm run db:remote` | Aplica las migraciones a la base de producción |
 | `npm run create-admin` | Genera `admin.sql` con un administrador |
+| `npm run backup` | Descarga una copia de la base de producción a `backups/` |
 
 ## API
 
@@ -170,6 +171,41 @@ Pages toma los bindings `DB` y `BUCKET` de `wrangler.toml` porque el archivo def
 - `public/_headers` define las cabeceras de seguridad de los archivos estáticos, incluida la política de contenido (CSP); la API añade las suyas en `server/app.ts`. Si se incorpora un recurso externo nuevo (otra fuente, un script, un mapa), hay que autorizar su origen en la CSP.
 - Las respuestas JSON de la API se envían con `Cache-Control: no-store`.
 - `.dev.vars` y `admin.sql` están excluidos de Git y no deben subirse al repositorio.
+
+## Copias de seguridad
+
+Hay tres mecanismos. Ninguno cubre las fotos, que viven en R2.
+
+**1. Restauración a un punto en el tiempo (Time Travel).** D1 guarda de forma automática el historial de la base durante 30 días. Es la vía más rápida para deshacer un borrado accidental, y restaura la base completa:
+
+```bash
+npx wrangler d1 time-travel restore ice-club-db --timestamp=2026-11-16T15:00:00-05:00
+```
+
+La fecha indica el momento al que se quiere volver. El comando muestra un marcador para deshacer la restauración si hiciera falta.
+
+**2. Copia semanal automática.** El flujo `.github/workflows/backup.yml` exporta cada lunes las tablas de la carta (sabores, secciones y productos) y guarda el archivo `carta.sql` como artefacto durante 90 días, en la pestaña **Actions** del repositorio. También puede lanzarse a mano con **Run workflow**. No incluye la tabla de administradores, porque el repositorio es público.
+
+Requiere dos secretos en **Settings → Secrets and variables → Actions**: `CLOUDFLARE_API_TOKEN` (token con permiso *D1: Edit*) y `CLOUDFLARE_ACCOUNT_ID`. Sin ellos el flujo termina con un aviso y no hace la copia.
+
+**3. Copia manual.** Descarga la base a la carpeta `backups/`, que está excluida de Git:
+
+```bash
+npm run backup
+```
+
+La copia completa incluye la tabla de administradores con el hash de la contraseña: no debe compartirse. Con `npm run backup -- --carta` se obtiene solo la carta, igual que la copia semanal.
+
+### Restaurar la carta desde un archivo
+
+Se borran las tres tablas y se aplica el archivo, que vuelve a crearlas con sus datos y sus índices. Los administradores no se tocan:
+
+```bash
+npx wrangler d1 execute ice-club-db --remote --command "DROP TABLE IF EXISTS products; DROP TABLE IF EXISTS categories; DROP TABLE IF EXISTS flavors"
+npx wrangler d1 execute ice-club-db --remote --file=carta.sql
+```
+
+Si alguna foto se subió después de la copia, su archivo quedará en R2 sin uso; si se eliminó después, el sabor o producto restaurado mostrará el degradado en lugar de la foto.
 
 ## Funcionamiento
 
