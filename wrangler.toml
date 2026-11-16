@@ -1,0 +1,18 @@
+# Configuración de Cloudflare Pages.
+# pages_build_output_dir hace que Pages tome los bindings de este archivo; no debe quitarse.
+name = "ice-club-menu"
+compatibility_date = "2026-11-01"
+pages_build_output_dir = "dist"
+
+# Base de datos D1 (SQLite). El database_id es un marcador:
+# se reemplaza por el real al crear la base en la Fase 8.
+[[d1_databases]]
+binding = "DB"
+database_name = "ice-club-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Almacén R2 para las fotos de sabores y productos.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ice-club-images"

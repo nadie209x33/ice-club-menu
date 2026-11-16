@@ -1,0 +1,3 @@
+# Copiar este archivo como .dev.vars para el desarrollo local.
+# El valor real de producción se registra en Cloudflare, nunca en Git.
+JWT_SECRET=valor-de-ejemplo-solo-para-desarrollo-local

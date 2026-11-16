@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+/* Paleta y fuentes del logo como variables de Tailwind (clases text-neon-cyan, font-script, etc.).
+   Los mismos colores están en src/components/theme.ts. */
+@theme {
+  --color-brick: #0e0c0f;
+  --color-mist: #d8d1e2;
+  --color-neon-cyan: #5ee7ff;
+  --color-neon-magenta: #ff5cc4;
+  --color-neon-purple: #b44dff;
+  --color-neon-blue: #3b8bff;
+  --color-neon-yellow: #ffe95e;
+  --color-neon-lime: #c6ff4a;
+
+  --font-script: "Yellowtail", "Brush Script MT", cursive;
+  --font-sans: "Outfit", system-ui, sans-serif;
+}
+
+html {
+  background-color: var(--color-brick);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: #f6f3fa;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Pared de ladrillo: líneas de mortero apenas visibles dibujadas con un SVG mínimo. */
+.brick-wall {
+  background-color: var(--color-brick);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='56'%3E%3Cpath d='M0 .5H72M0 28.5H72M.5 0V28M36.5 28V56' stroke='%23fff' stroke-opacity='.045'/%3E%3C/svg%3E");
+}
+
+/* Texto de neón: núcleo casi blanco, halo interno fuerte y halo externo difuso.
+   El color se fija con la variable --neon. */
+.neon-text {
+  color: color-mix(in srgb, var(--neon) 18%, white);
+  text-shadow:
+    0 0 3px color-mix(in srgb, var(--neon) 60%, white),
+    0 0 10px var(--neon),
+    0 0 24px var(--neon),
+    0 0 48px color-mix(in srgb, var(--neon) 55%, transparent);
+}
+
+/* Borde de neón para tarjetas. */
+.neon-box {
+  border: 1.5px solid color-mix(in srgb, var(--neon) 80%, white);
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--neon) 80%, transparent),
+    0 0 22px color-mix(in srgb, var(--neon) 32%, transparent),
+    inset 0 0 14px color-mix(in srgb, var(--neon) 14%, transparent);
+}
+
+/* Píldora con borde de neón, como el recuadro de "LA DECANATURA". */
+.neon-pill {
+  border: 1.5px solid var(--neon);
+  border-radius: 9999px;
+  color: color-mix(in srgb, var(--neon) 55%, white);
+  box-shadow:
+    0 0 5px color-mix(in srgb, var(--neon) 70%, transparent),
+    inset 0 0 6px color-mix(in srgb, var(--neon) 25%, transparent);
+}
+
+/* Degradado del granizado del logo, con puntos de luz tipo galaxia.
+   Se usa cuando un sabor no tiene foto. */
+.galaxy {
+  background-image:
+    radial-gradient(circle at 22% 28%, rgb(255 255 255 / 0.9) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 68% 18%, rgb(255 255 255 / 0.7) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 80% 62%, rgb(255 255 255 / 0.8) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 35% 74%, rgb(255 255 255 / 0.6) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 55% 45%, rgb(255 255 255 / 0.5) 0 0.8px, transparent 1.4px),
+    linear-gradient(170deg, #b44dff 0%, #e24bd0 38%, #5a5cf0 68%, #2fa8ff 100%);
+}
+
+/* El fondo negro del logo se funde con la pared y sus bordes se desvanecen. */
+.logo-blend {
+  mix-blend-mode: screen;
+  mask-image:
+    linear-gradient(to right, transparent, #000 9%, #000 91%, transparent),
+    linear-gradient(to bottom, transparent, #000 9%, #000 91%, transparent);
+  mask-composite: intersect;
+}
+
+/* Campo de formulario del panel. El tamaño de 16 px evita que el celular amplíe la pantalla al escribir. */
+.field {
+  display: block;
+  width: 100%;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  border-radius: 0.75rem;
+  background-color: rgb(0 0 0 / 0.6);
+  padding: 0.55rem 0.75rem;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.field:focus {
+  outline: 2px solid var(--color-neon-cyan);
+  outline-offset: 1px;
+}
+
+/* Titilar suave de los destellos. */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.twinkle {
+  animation: twinkle 2.8s ease-in-out infinite;
+}
+
+/* Sin animaciones para quien las tiene desactivadas en su dispositivo. */
+@media (prefers-reduced-motion: reduce) {
+  .twinkle {
+    animation: none;
+    opacity: 0.9;
+  }
+}
