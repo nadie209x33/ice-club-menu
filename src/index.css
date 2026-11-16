@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+/* Fuentes alojadas en el propio sitio (public/fonts), en el subconjunto latino,
+   que cubre el español. Sus licencias están en la carpeta licenses/.
+   Outfit es una fuente variable: un solo archivo sirve todos los grosores. */
+@font-face {
+  font-family: "Outfit";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/outfit-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Yellowtail";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/yellowtail-latin.woff2") format("woff2");
+}
+
 /* Paleta y fuentes del logo como variables de Tailwind (clases text-neon-cyan, font-script, etc.).
    Los mismos colores están en src/components/theme.ts. */
 @theme {

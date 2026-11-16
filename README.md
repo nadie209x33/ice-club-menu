@@ -31,7 +31,8 @@ src/admin/                   Pestañas del panel y selector de fotos
 src/components/              Fondo, logo, destellos, tarjetas y colores (theme.ts)
 src/api.ts                   Cliente de la API y formato de precios
 src/types.ts                 Tipos compartidos
-public/                      Logo y favicon
+public/                      Logo, favicon y fuentes (public/fonts)
+licenses/                    Licencias de las fuentes
 wrangler.toml                Configuración de Pages, D1 y R2
 ```
 
@@ -172,6 +173,7 @@ Pages toma los bindings `DB` y `BUCKET` de `wrangler.toml` porque el archivo def
 
 ## Funcionamiento
 
+- Las fuentes Outfit (licencia SIL Open Font 1.1) y Yellowtail (licencia Apache 2.0) se sirven desde el propio sitio, en `public/fonts`; el sitio no hace peticiones a terceros. Las licencias están en `licenses/`.
 - El menú se actualiza solo: vuelve a consultar la API al regresar a la pestaña y cada cinco minutos.
 - `public/robots.txt` y la cabecera `X-Robots-Tag` evitan que los buscadores listen el panel.
 - Cada push y cada pull request ejecutan `npm run build` en GitHub Actions (`.github/workflows/ci.yml`).
